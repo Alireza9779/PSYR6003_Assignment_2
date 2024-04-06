@@ -1,0 +1,227 @@
+---
+title: "Assignment2"
+author: Alireza Aleali
+format: docx
+editor: visual
+---
+
+## Data cleaning & sex recoding prior to analysis
+
+```{r}
+library(tidyverse)
+library(haven)
+
+#importing data
+data = read_sav("/Users/alireza/Desktop/Rclass/Assignment/2nd_assignment/PSYR6003.A2.sav")
+head(data)
+
+#Recoding 'sex' to a Factor
+recoded_data = 
+  data %>% 
+  drop_na() %>%
+  mutate(sex = as.factor(sex))  %>% 
+  mutate(sex = recode_factor(sex, Female = "0", Male = "1", "Other (specify)" = "2"))
+head(recoded_data)
+
+# Count NaN values in each column
+nan_counts <- recoded_data %>% 
+  summarise(across(everything(), ~sum(is.nan(.))))
+
+# Print the count of NaN values
+print(nan_counts)
+```
+
+## Calculating subscale totals & Reverse coding 'tipm.CONS2.3y'
+
+```{r}
+recoded_data = 
+  recoded_data %>% 
+  rowwise %>% 
+  mutate(perf_sc = mean(c(mps.SPP1.3y,mps.SPP2.3y,mps.SPP3.3y,mps.SPP4.3y, mps.SPP5.3y))) %>% 
+  mutate(tipm.CONS2.3y = 8 - tipm.CONS2.3y) %>% #sub each from 8 since the scale is 1to7
+  mutate(conc_sc = mean(c(tipm.CONS1.3y, tipm.CONS2.3y))) %>% 
+  mutate(aff_sc = mean(c(guilt1.3y, guilt2.3y, guilt3.3y, 
+                            dep1.3y, dep2.3y, dep3.3y, 
+                            fear1.3y, fear2.3y, fear3.3y, 
+                            host1.3y, host2.3y, host3.3y)))
+```
+
+## Hypotheses to Test
+
+Previous studies indicate that both sex and conscientiousness are linked to negative affect. Specifically, females tend to experience more negative affect compared to males, and conscientiousness typically correlates negatively with negative affect. Additionally, socially prescribed perfectionism (SPP) tends to coincide with negative affect, wherein higher levels of SPP are associated with increased negative affect. However, it's important to note that sex, conscientiousness, and SPP often vary together, making it challenging to identify the distinct effects of each factor. The aim of the current study is to demonstrate the additional predictive value of SPP in forecasting negative affect, beyond the influences of sex and conscientiousness.
+
+**Hypothesis 1 (H1):** Gender, conscientiousness, and socially prescribed perfectionism (SPP) will collectively and significantly forecast negative affect, following the outlined patterns (i.e., women exhibiting higher negative affect than men, negative correlation between conscientiousness and negative affect).
+
+**Research Question:** Are sex, conscientiousness, and SPP significant predictors of negative affect?
+
+**Full model:** negative affect = b0(intercept) + b1(sex) + b2(conscientiousness) + b3(SPP) + e **Reduced model:** negative affect = b0
+
+## Initial step involves visualizing the data through univariate plots.
+
+```{r}
+library(flexplot)
+library(patchwork)
+aff_uni =flexplot(aff_sc~1, data = recoded_data)
+sex_uni =flexplot(sex~1, data = recoded_data)
+conc_uni =flexplot(conc_sc~1, data = recoded_data)
+perf_uni =flexplot(perf_sc~1, data = recoded_data)
+aff_uni+sex_uni+conc_uni+perf_uni
+```
+
+The scores on the negative affect subscale exhibit a slight right skew, however we can still consider almost a logical distribution for it. Regarding sex distribution, it's unbalanced due to the presence of one individual identified as "other" (coded as 2), with fewer males than females. Conscientiousness demonstrates a peak around a mean value of approximately 6. Socially prescribed perfectionism (SPP) displays a distribution that is reasonably close to normal.
+
+## Model visualization
+
+```{r}
+#data visualization by considering sex distribution for other predictors
+fig1 = flexplot(aff_sc ~ conc_sc | sex+perf_sc, data=recoded_data, method = "lm")
+fig2 = flexplot(aff_sc ~ perf_sc | sex+conc_sc, data=recoded_data, method = "lm")
+fig1+fig2
+#creating related model
+model1=lm(aff_sc ~ sex + conc_sc + perf_sc, data=recoded_data)
+visualize(model1)
+
+```
+
+There exists a singular data point representing the "other" sex category. Additionally, there is only one data point corresponding to males with high conscientiousness, as observed through the binning process in flexplot. Among females (sex=0), a negative association between conscientiousness and negative affect appears apparent, with the strength of this relationship varying across different levels of SPP. A similar trend is observed among males (sex=1), albeit with fewer data points and variations observed across binned levels of perfectionism. Conversely, a positive correlation between SPP and negative affect is evident among females, with slight variations observed across different levels of conscientiousness. In males with lower and mid-levels of conscientiousness, the relationship between SPP and negative affect differs for each group, displaying a positive correlation in one and a negative correlation in the other.
+
+So, the data are independent since they are not longitudinal, and there are no dyads or groups of individuals. The histogram of residuals demonstrates a reasonably normal distribution, with a subtle right skew. However, the R-D plot exhibits curvature, indicating a potential violation of linearity. Additionally, the S-L plot displays a slight increase in slope, suggesting some degree of heteroskedasticity, although not severe.
+
+## Conducting a sensitivity analysis by excluding one individual from the "other" sex category
+
+```{r}
+recoded_data2 = 
+  recoded_data %>%   
+  filter(sex != "2")
+
+fig3= flexplot(aff_sc ~ conc_sc | sex+perf_sc, data=recoded_data2, method = "lm")
+fig4= flexplot(aff_sc ~ perf_sc | sex+conc_sc, data=recoded_data2, method = "lm")
+fig3+fig4
+model2=lm(aff_sc ~ sex + conc_sc + perf_sc, data=recoded_data2)
+visualize(model2)
+```
+
+There is no particular difference! We need to check the model comparison to see which one is better\
+\
+
+## Applying Model Comparison
+
+```{r}
+# to see which model is better to use
+model.comparison(model1,model2)
+#estimates(model1)
+#estimates(model2)
+```
+
+From the model comparison we can see that there is no difference at all by considering or ignoring that individual data point (sex = other)\
+
+## Investigating male data to search for any possible outlier (since we found one single data point in higher level of conscientiousness)
+
+```{r}
+only_male = 
+  recoded_data %>%   
+  filter(sex==1)
+
+flexplot(aff_sc ~ conc_sc, data=only_male, method = "lm")
+```
+
+It appears that the presence of the single "7" value does not significantly alter the relationship between conscientiousness and negative affect in males. Therefore, we can safely ignore to conduct a sensitivity analysis for this particular case.
+
+## Since our model exhibits a violation of linearity, we can conduct sensitivity analyses by incorporating polynomial approach
+
+```{r}
+model3 = lm(aff_sc ~ sex + conc_sc + perf_sc + I(conc_sc^2), data=recoded_data)
+model4 = lm(aff_sc ~ sex + conc_sc + perf_sc + I(perf_sc^2), data=recoded_data)
+visualize(model3) + visualize(model4)
+
+#comparing each with original model which is "model1"
+
+#model1=lm(aff_sc ~ sex + conc_sc + perf_sc, data=recoded_data)
+
+model.comparison(model1,model3)
+model.comparison(model1,model4)
+
+```
+
+model3&4 have slightly lower AIC (Akaike Information Criterion) than model1, suggesting that model3&4 might be slightly more efficient in terms of information loss. Despite model3&4 having a lower AIC, their BIC (Bayesian Information Criterion) is higher compared to model1. This implies that when considering the penalty for complexity, model1 might be preferred. model1 has a Bayes factor significantly higher than model3&4 ones. This strongly suggests that the evidence supports model1 over model3&4. Also, the p-values are above the common threshold for significance, suggesting that the models may not be explaining the variation in the data significantly better than a null model (model1). In addition, model3&4 have slightly higher R-squared values compared to model1, indicating that it explains more variance in the outcome. **Overall, model1 might be the more robust model despite its slightly lower R-squared value for using.**
+
+## Checking for possible interaction
+
+```{r}
+#The * operator between sex, conc_sc, and perf_sc implies not just the inclusion of these variables but also all their interactions up to the three-way interaction (i.e., sex:conc_sc, sex:perf_sc, conc_sc:perf_sc, and sex:conc_sc:perf_sc).
+model5 = lm(aff_sc ~ sex*conc_sc*perf_sc, data=recoded_data)
+model.comparison(model1, model5)
+```
+
+Still we like to proceed with **model1**!
+
+Comparing full and reduced model based on our **hypothesis 1\
+**
+
+```{r}
+
+#full model = model1 = lm(aff_sc ~ sex + conc_sc + perf_sc, data=recoded_data)
+
+model_reduced = lm(aff_sc ~ 1, data=recoded_data)
+model.comparison(model1, model_reduced)
+estimates(model1)
+```
+
+Estimates for model comparison suggest that our model, including predictors, has the potential to forecast up to 1.5 points in negative affect. The selected model explains 27% of the variance in the outcome, with conscientiousness contributing the most (15.9%) to this explanation. Sex and SPP contribute 2.7% and 8.4%, respectively, to the variance explained by the model. All showing the superiority of **full model (model1)**
+
+**Hypothesis 2 (H2):** Socially prescribed perfectionism (SPP) will forecast distinct variance in negative affect beyond the influences of sex and conscientiousness in a significant manner.
+
+**Research Question:** Is SPP a significant predictor of negative affect, after controlling for the effects of gender and conscientiousness?
+
+**Full model:** negative affect = b0 + b1(sex) + b2(conscientiousness) + b3(SPP) + e
+
+**Reduced model:** negative affect = b0 + b1(sex) + b2(conscientiousness) + e
+
+Like previous one first we need visualization
+
+```{r}
+flexplot(aff_sc ~ sex + conc_sc | perf_sc, data=recoded_data)
+
+#since it's not really useful in terms of visualization we are switching to AVP
+added.plot(aff_sc~perf_sc, data = recoded_data, method = "lm",
+            lm_formula = aff_sc~ sex + conc_sc)
+```
+
+After controlling for conscientiousness and sex, there appears to be a positive association between SPP and negative affect. There is no necessity to recheck assumptions, as the model remains consistent with the one used for Hypothesis 1.
+
+## Applying model comparison for full vs reduced models
+
+```{r}
+#full model = model1 = lm(aff_sc ~ sex + conc_sc + perf_sc, data=recoded_data)
+model_reduced_2 = lm(aff_sc ~ sex + conc_sc, data=recoded_data)
+visualize(model1) + visualize(model_reduced_2)
+model.comparison(model1, model_reduced_2)
+```
+
+The **full model** can explain the predicted difference in negative affect of approximately 0.64 points. Comparatively, our complete model demonstrates superior fit, indicated by lower AIC/BIC values, a Bayes Factor exceeding 100, a significant p-value, and it accounts for 27% of the variance in the outcome, as opposed to only 18.6% explained by the reduced model.
+
+## Descriptive Statistics: a. Bivariate correlation table
+
+```{r}
+#creating correlation table including mean and SD
+correlation_data = recoded_data %>% 
+  select(aff_sc, sex, conc_sc, perf_sc)
+
+library(apaTables)
+table1 = apa.cor.table(correlation_data, table.number=1, filename= "Correlation_Table")
+
+print(table1)
+table1 = as_tibble(table1$table.body)
+write.csv(table1, file="/Users/alireza/Desktop/Rclass/Assignment/2nd_assignment/table1.csv")
+```
+
+## b. Regression table
+
+```{r}
+table2= apa.reg.table(model1, table.number = 2, filename = "Regression_Table.doc")
+print(table2)
+table2 = as.tibble(table2$table_body)
+print(table2)
+
+write_csv(table2, file="/Users/alireza/Desktop/Rclass/Assignment/2nd_assignment/table2.csv")
+```
